@@ -1,14 +1,22 @@
 {
   "name": "mcp-ssh-server",
   "version": "1.0.0",
-  "description": "MCP server providing SSH capabilities for Claude Desktop",
+  "description": "MCP server and interactive CLI providing SSH capabilities for Claude Desktop",
   "main": "build/index.js",
   "bin": {
-    "mcp-ssh-server": "build/index.js"
+    "mcp-ssh-server": "build/index.js",
+    "mcp-ssh": "build/cli.js"
   },
   "scripts": {
     "build": "tsc",
-    "start": "node build/index.js"
+    "start": "node build/index.js",
+    "cli": "node build/cli.js",
+    "package": "pkg build/cli.js --targets node18-win-x64,node18-linux-x64 --output dist/mcp-ssh --compress GZip"
+  },
+  "pkg": {
+    "assets": [
+      "node_modules/ssh2/**/*"
+    ]
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
@@ -18,6 +26,7 @@
   "devDependencies": {
     "@types/node": "^22.13.1",
     "@types/ssh2": "^1.15.4",
+    "@yao-pkg/pkg": "^6.0.0",
     "typescript": "^5.7.3"
   },
   "license": "MIT"
