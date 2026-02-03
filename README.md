@@ -1,66 +1,68 @@
 # MCP SSH Server
 
-MCP server addon for **Claude Desktop** that gives Claude SSH access to your servers — connect, run commands, upload/download files, and transfer files between servers.
+MCP addon for **Claude Desktop** — gives Claude SSH access to your servers.
 
-## Install (2 steps)
+## Install
 
-### 1. Open your Claude Desktop config
-
-On Windows, open this file in a text editor:
+Run this one command (requires [Node.js](https://nodejs.org) 18+):
 
 ```
-%APPDATA%\Claude\claude_desktop_config.json
+npx -y mcp-ssh-server
 ```
 
-### 2. Add the SSH server
+It automatically adds itself to Claude Desktop. Restart Claude Desktop and you're done.
 
-Paste this into the file:
+## Usage
+
+Just talk to Claude:
+
+- *"Connect to 185.91.118.4 as root with password mypass, call it production"*
+- *"Run `ls -la /var/www` on production"*
+- *"Upload C:\Users\me\app.zip to /tmp/app.zip on production"*
+- *"Download /var/log/error.log from production"*
+- *"Connect to 10.0.0.5 as deploy with key at C:\Users\me\.ssh\id_rsa, name it staging"*
+- *"Transfer /var/log/app.log from production to /tmp/app.log on staging"*
+- *"List my servers"*
+- *"Remove staging"*
+
+## Servers are saved
+
+When you tell Claude to connect to a server, it's saved to `~/.mcp-ssh/servers.json`. Next time just say *"connect to production"* and it reconnects using the saved config.
+
+You can also edit `servers.json` manually:
 
 ```json
 {
-  "mcpServers": {
-    "ssh": {
-      "command": "npx",
-      "args": ["-y", "mcp-ssh-server"]
-    }
+  "production": {
+    "host": "185.91.118.4",
+    "port": 22,
+    "username": "root",
+    "password": "mypass"
+  },
+  "staging": {
+    "host": "10.0.0.5",
+    "port": 22,
+    "username": "deploy",
+    "privateKeyPath": "C:\\Users\\me\\.ssh\\id_rsa"
   }
 }
 ```
-
-Restart Claude Desktop. That's it — Claude now has SSH tools available.
-
-## What you can ask Claude
-
-Once installed, just talk to Claude naturally:
-
-- *"Connect to 185.91.118.4 as root with password mypass123, call it production"*
-- *"Run `ls -la /var/www` on production"*
-- *"Show me all files in /etc/nginx on production"*
-- *"Upload C:\Users\me\app.zip to /tmp/app.zip on production"*
-- *"Download /var/log/nginx/error.log from production to my desktop"*
-- *"Connect to 10.0.0.5 as deploy with my key at C:\Users\me\.ssh\id_rsa, name it staging"*
-- *"Transfer /var/log/app.log from production to /tmp/app.log on staging"*
-- *"List all my active sessions"*
-- *"Disconnect from staging"*
 
 ## Tools
 
 | Tool | What it does |
 |------|--------------|
-| `ssh_connect` | Connect to a server (password or SSH key) |
+| `ssh_connect` | Connect to a server (new or saved) |
 | `ssh_disconnect` | Close a connection |
-| `ssh_list_sessions` | Show all active connections |
+| `ssh_list_sessions` | Show all connections and saved servers |
+| `ssh_remove_server` | Delete a saved server |
 | `ssh_execute` | Run a shell command |
-| `ssh_upload` | Upload a local file to a server (SFTP) |
-| `ssh_download` | Download a file from a server (SFTP) |
-| `ssh_transfer` | Copy a file between two connected servers |
-| `ssh_list_files` | List directory contents on a server |
+| `ssh_upload` | Upload a local file (SFTP) |
+| `ssh_download` | Download a remote file (SFTP) |
+| `ssh_transfer` | Copy a file between two servers |
+| `ssh_list_files` | List remote directory contents |
 
 ## Building from Source
-
-If you prefer to build it yourself instead of using `npx`:
-
-**Requirements:** [Node.js](https://nodejs.org) 18+ (includes npm)
 
 ```bash
 git clone https://github.com/MaraBank/mcp-ssh-server.git
@@ -69,25 +71,18 @@ npm install
 npm run build
 ```
 
-Then point Claude Desktop to your local build:
+Then point Claude Desktop config (`%APPDATA%\Claude\claude_desktop_config.json`) to your local build:
 
 ```json
 {
   "mcpServers": {
     "ssh": {
       "command": "node",
-      "args": ["C:\\full\\path\\to\\mcp-ssh-server\\build\\index.js"]
+      "args": ["C:\\path\\to\\mcp-ssh-server\\build\\index.js"]
     }
   }
 }
 ```
-
-## Security
-
-- Credentials are held in memory only for the duration of the session and never written to disk
-- Private keys can be referenced by file path or passed as a string
-- Connections time out after 30 seconds
-- No data is sent anywhere except to the SSH servers you connect to
 
 ## License
 

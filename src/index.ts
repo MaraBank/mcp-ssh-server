@@ -6,9 +6,55 @@ import { Client, SFTPWrapper } from "ssh2";
 import { z } from "zod";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 
 // ---------------------------------------------------------------------------
-// Session store
+// Saved servers (persisted to ~/.mcp-ssh/servers.json)
+// ---------------------------------------------------------------------------
+
+interface SavedServer {
+  host: string;
+  port: number;
+  username: string;
+  password?: string;
+  privateKeyPath?: string;
+  passphrase?: string;
+}
+
+const SERVERS_DIR = path.join(os.homedir(), ".mcp-ssh");
+const SERVERS_FILE = path.join(SERVERS_DIR, "servers.json");
+
+function loadSavedServers(): Record<string, SavedServer> {
+  try {
+    if (fs.existsSync(SERVERS_FILE)) {
+      return JSON.parse(fs.readFileSync(SERVERS_FILE, "utf-8"));
+    }
+  } catch {}
+  return {};
+}
+
+function writeSavedServers(servers: Record<string, SavedServer>): void {
+  if (!fs.existsSync(SERVERS_DIR)) fs.mkdirSync(SERVERS_DIR, { recursive: true });
+  fs.writeFileSync(SERVERS_FILE, JSON.stringify(servers, null, 2));
+  try { fs.chmodSync(SERVERS_FILE, 0o600); } catch {}
+}
+
+function saveServer(name: string, entry: SavedServer): void {
+  const servers = loadSavedServers();
+  servers[name] = entry;
+  writeSavedServers(servers);
+}
+
+function deleteSavedServer(name: string): boolean {
+  const servers = loadSavedServers();
+  if (!(name in servers)) return false;
+  delete servers[name];
+  writeSavedServers(servers);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Session store (active connections, in-memory only)
 // ---------------------------------------------------------------------------
 
 interface SessionInfo {
@@ -18,26 +64,23 @@ interface SessionInfo {
 
 const sessions = new Map<string, SessionInfo>();
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function getSession(sessionName: string): SessionInfo {
   const session = sessions.get(sessionName);
   if (!session) {
     throw new Error(
-      `No active session named "${sessionName}". Use ssh_list_sessions to see active sessions.`
+      `No active session named "${sessionName}". Use ssh_connect to connect or ssh_list_sessions to see available servers.`
     );
   }
   return session;
 }
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 function getSftp(client: Client): Promise<SFTPWrapper> {
   return new Promise((resolve, reject) => {
-    client.sftp((err, sftp) => {
-      if (err) reject(err);
-      else resolve(sftp);
-    });
+    client.sftp((err, sftp) => (err ? reject(err) : resolve(sftp)));
   });
 }
 
@@ -48,19 +91,11 @@ function execCommand(
   return new Promise((resolve, reject) => {
     client.exec(command, (err, stream) => {
       if (err) return reject(err);
-
       let stdout = "";
       let stderr = "";
-
-      stream.on("close", (code: number) => {
-        resolve({ stdout, stderr, code: code ?? 0 });
-      });
-      stream.on("data", (data: Buffer) => {
-        stdout += data.toString();
-      });
-      stream.stderr.on("data", (data: Buffer) => {
-        stderr += data.toString();
-      });
+      stream.on("close", (code: number) => resolve({ stdout, stderr, code: code ?? 0 }));
+      stream.on("data", (data: Buffer) => { stdout += data.toString(); });
+      stream.stderr.on("data", (data: Buffer) => { stderr += data.toString(); });
     });
   });
 }
@@ -78,32 +113,46 @@ const server = new McpServer({
 
 server.tool(
   "ssh_connect",
-  "Connect to a remote server via SSH. Supports password and private-key authentication.",
+  "Connect to a remote server via SSH. Provide full details for a new server (it will be saved for next time), or just the sessionName to reconnect to a previously saved server.",
   {
-    sessionName: z.string().describe("A friendly name for this session (e.g. 'prod-web')"),
-    host: z.string().describe("Hostname or IP address"),
+    sessionName: z.string().describe("Friendly name for this session (e.g. 'production'). If this matches a saved server and no host is given, the saved config is used."),
+    host: z.string().optional().describe("Hostname or IP address. Omit to connect using a saved server."),
     port: z.number().int().min(1).max(65535).default(22).describe("SSH port (default 22)"),
-    username: z.string().describe("SSH username"),
+    username: z.string().optional().describe("SSH username. Omit to use saved server config."),
     password: z.string().optional().describe("Password (omit if using key auth)"),
-    privateKeyPath: z
-      .string()
-      .optional()
-      .describe("Absolute path to a private key file (e.g. C:\\\\Users\\\\me\\\\.ssh\\\\id_rsa)"),
-    privateKey: z
-      .string()
-      .optional()
-      .describe("Private key contents as a string (alternative to privateKeyPath)"),
+    privateKeyPath: z.string().optional().describe("Absolute path to a private key file"),
+    privateKey: z.string().optional().describe("Private key contents as a string (not saved to disk)"),
     passphrase: z.string().optional().describe("Passphrase for the private key, if encrypted"),
   },
   async ({ sessionName, host, port, username, password, privateKeyPath, privateKey, passphrase }) => {
     if (sessions.has(sessionName)) {
       return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Session "${sessionName}" already exists. Disconnect first or choose a different name.`,
-          },
-        ],
+        content: [{ type: "text" as const, text: `Session "${sessionName}" already exists. Disconnect first or choose a different name.` }],
+        isError: true,
+      };
+    }
+
+    // If host not provided, look up saved server
+    if (!host) {
+      const saved = loadSavedServers();
+      const entry = saved[sessionName];
+      if (!entry) {
+        return {
+          content: [{ type: "text" as const, text: `No saved server named "${sessionName}" and no host provided. Provide host + username for a new connection.` }],
+          isError: true,
+        };
+      }
+      host = entry.host;
+      port = entry.port;
+      username = username ?? entry.username;
+      password = password ?? entry.password;
+      privateKeyPath = privateKeyPath ?? entry.privateKeyPath;
+      passphrase = passphrase ?? entry.passphrase;
+    }
+
+    if (!username) {
+      return {
+        content: [{ type: "text" as const, text: "Username is required." }],
         isError: true,
       };
     }
@@ -125,12 +174,7 @@ server.tool(
 
     if (!password && !resolvedKey) {
       return {
-        content: [
-          {
-            type: "text" as const,
-            text: "You must provide either a password or a private key (privateKeyPath or privateKey).",
-          },
-        ],
+        content: [{ type: "text" as const, text: "Provide either a password or a private key." }],
         isError: true,
       };
     }
@@ -144,23 +188,10 @@ server.tool(
           reject(new Error("Connection timed out after 30 seconds"));
         }, 30_000);
 
-        client.on("ready", () => {
-          clearTimeout(timeout);
-          resolve();
-        });
-        client.on("error", (err) => {
-          clearTimeout(timeout);
-          reject(err);
-        });
+        client.on("ready", () => { clearTimeout(timeout); resolve(); });
+        client.on("error", (err) => { clearTimeout(timeout); reject(err); });
 
-        client.connect({
-          host,
-          port,
-          username,
-          password,
-          privateKey: resolvedKey,
-          passphrase,
-        });
+        client.connect({ host, port, username, password, privateKey: resolvedKey, passphrase });
       });
     } catch (err: any) {
       return {
@@ -171,13 +202,16 @@ server.tool(
 
     sessions.set(sessionName, { client, config: { host, port, username } });
 
+    // Auto-save server config (never save inline privateKey to disk)
+    saveServer(sessionName, {
+      host, port, username,
+      ...(password ? { password } : {}),
+      ...(privateKeyPath ? { privateKeyPath } : {}),
+      ...(passphrase ? { passphrase } : {}),
+    });
+
     return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Connected to ${username}@${host}:${port} as session "${sessionName}".`,
-        },
-      ],
+      content: [{ type: "text" as const, text: `Connected to ${username}@${host}:${port} as "${sessionName}". Server saved for next time.` }],
     };
   }
 );
@@ -194,14 +228,14 @@ server.tool(
     const session = sessions.get(sessionName);
     if (!session) {
       return {
-        content: [{ type: "text" as const, text: `No session named "${sessionName}".` }],
+        content: [{ type: "text" as const, text: `No active session "${sessionName}".` }],
         isError: true,
       };
     }
     session.client.end();
     sessions.delete(sessionName);
     return {
-      content: [{ type: "text" as const, text: `Session "${sessionName}" disconnected.` }],
+      content: [{ type: "text" as const, text: `Disconnected "${sessionName}". Server config is still saved — use ssh_connect to reconnect.` }],
     };
   }
 );
@@ -210,19 +244,62 @@ server.tool(
 
 server.tool(
   "ssh_list_sessions",
-  "List all active SSH sessions.",
+  "List all active SSH sessions and saved servers.",
   {},
   async () => {
-    if (sessions.size === 0) {
+    const saved = loadSavedServers();
+    const allNames = new Set([...sessions.keys(), ...Object.keys(saved)]);
+
+    if (allNames.size === 0) {
       return {
-        content: [{ type: "text" as const, text: "No active sessions." }],
+        content: [{ type: "text" as const, text: "No sessions or saved servers. Use ssh_connect to add one." }],
       };
     }
-    const lines = Array.from(sessions.entries()).map(
-      ([name, { config }]) => `• ${name} — ${config.username}@${config.host}:${config.port}`
-    );
+
+    const lines: string[] = [];
+    for (const name of allNames) {
+      const active = sessions.has(name);
+      const entry = saved[name];
+      const info = active
+        ? sessions.get(name)!.config
+        : entry
+        ? { host: entry.host, port: entry.port, username: entry.username }
+        : null;
+
+      if (info) {
+        const status = active ? "connected" : "saved";
+        lines.push(`• ${name} — ${info.username}@${info.host}:${info.port} [${status}]`);
+      }
+    }
     return {
       content: [{ type: "text" as const, text: lines.join("\n") }],
+    };
+  }
+);
+
+// ---- ssh_remove_server ----------------------------------------------------
+
+server.tool(
+  "ssh_remove_server",
+  "Remove a saved server from servers.json and disconnect if currently active.",
+  {
+    sessionName: z.string().describe("Name of the server to remove"),
+  },
+  async ({ sessionName }) => {
+    const session = sessions.get(sessionName);
+    if (session) {
+      session.client.end();
+      sessions.delete(sessionName);
+    }
+    const removed = deleteSavedServer(sessionName);
+    if (!removed && !session) {
+      return {
+        content: [{ type: "text" as const, text: `No server named "${sessionName}".` }],
+        isError: true,
+      };
+    }
+    return {
+      content: [{ type: "text" as const, text: `Removed "${sessionName}".` }],
     };
   }
 );
@@ -238,9 +315,7 @@ server.tool(
   },
   async ({ sessionName, command }) => {
     let session: SessionInfo;
-    try {
-      session = getSession(sessionName);
-    } catch (err: any) {
+    try { session = getSession(sessionName); } catch (err: any) {
       return { content: [{ type: "text" as const, text: err.message }], isError: true };
     }
 
@@ -272,9 +347,7 @@ server.tool(
   },
   async ({ sessionName, localPath, remotePath }) => {
     let session: SessionInfo;
-    try {
-      session = getSession(sessionName);
-    } catch (err: any) {
+    try { session = getSession(sessionName); } catch (err: any) {
       return { content: [{ type: "text" as const, text: err.message }], isError: true };
     }
 
@@ -289,18 +362,10 @@ server.tool(
     try {
       const sftp = await getSftp(session.client);
       await new Promise<void>((resolve, reject) => {
-        sftp.fastPut(resolved, remotePath, (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
+        sftp.fastPut(resolved, remotePath, (err) => (err ? reject(err) : resolve()));
       });
       return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Uploaded ${resolved} → ${session.config.host}:${remotePath}`,
-          },
-        ],
+        content: [{ type: "text" as const, text: `Uploaded ${resolved} → ${session.config.host}:${remotePath}` }],
       };
     } catch (err: any) {
       return {
@@ -323,35 +388,21 @@ server.tool(
   },
   async ({ sessionName, remotePath, localPath }) => {
     let session: SessionInfo;
-    try {
-      session = getSession(sessionName);
-    } catch (err: any) {
+    try { session = getSession(sessionName); } catch (err: any) {
       return { content: [{ type: "text" as const, text: err.message }], isError: true };
     }
 
     const resolved = path.resolve(localPath);
-
-    // Ensure parent directory exists
     const dir = path.dirname(resolved);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
     try {
       const sftp = await getSftp(session.client);
       await new Promise<void>((resolve, reject) => {
-        sftp.fastGet(remotePath, resolved, (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
+        sftp.fastGet(remotePath, resolved, (err) => (err ? reject(err) : resolve()));
       });
       return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Downloaded ${session.config.host}:${remotePath} → ${resolved}`,
-          },
-        ],
+        content: [{ type: "text" as const, text: `Downloaded ${session.config.host}:${remotePath} → ${resolved}` }],
       };
     } catch (err: any) {
       return {
@@ -387,7 +438,6 @@ server.tool(
       const srcSftp = await getSftp(src.client);
       const dstSftp = await getSftp(dst.client);
 
-      // Read entire file from source into memory buffer
       const data = await new Promise<Buffer>((resolve, reject) => {
         const chunks: Buffer[] = [];
         const readStream = srcSftp.createReadStream(sourceRemotePath);
@@ -396,7 +446,6 @@ server.tool(
         readStream.on("error", reject);
       });
 
-      // Write buffer to destination
       await new Promise<void>((resolve, reject) => {
         const writeStream = dstSftp.createWriteStream(destinationRemotePath);
         writeStream.on("close", () => resolve());
@@ -405,12 +454,7 @@ server.tool(
       });
 
       return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Transferred ${src.config.host}:${sourceRemotePath} → ${dst.config.host}:${destinationRemotePath} (${data.length} bytes)`,
-          },
-        ],
+        content: [{ type: "text" as const, text: `Transferred ${src.config.host}:${sourceRemotePath} → ${dst.config.host}:${destinationRemotePath} (${data.length} bytes)` }],
       };
     } catch (err: any) {
       return {
@@ -432,19 +476,14 @@ server.tool(
   },
   async ({ sessionName, remotePath }) => {
     let session: SessionInfo;
-    try {
-      session = getSession(sessionName);
-    } catch (err: any) {
+    try { session = getSession(sessionName); } catch (err: any) {
       return { content: [{ type: "text" as const, text: err.message }], isError: true };
     }
 
     try {
       const sftp = await getSftp(session.client);
       const list = await new Promise<any[]>((resolve, reject) => {
-        sftp.readdir(remotePath, (err, list) => {
-          if (err) reject(err);
-          else resolve(list);
-        });
+        sftp.readdir(remotePath, (err, list) => (err ? reject(err) : resolve(list)));
       });
 
       if (list.length === 0) {
@@ -454,18 +493,16 @@ server.tool(
       }
 
       const lines = list.map((entry) => {
-        const typeChar = entry.attrs.isDirectory() ? "d" : entry.attrs.isSymbolicLink() ? "l" : "-";
+        const mode = entry.attrs.mode;
+        const isDir = (mode & 0o170000) === 0o040000;
+        const isLink = (mode & 0o170000) === 0o120000;
+        const typeChar = isDir ? "d" : isLink ? "l" : "-";
         const size = entry.attrs.size ?? 0;
         return `${typeChar} ${String(size).padStart(10)} ${entry.filename}`;
       });
 
       return {
-        content: [
-          {
-            type: "text" as const,
-            text: `${remotePath} (${list.length} entries):\n${lines.join("\n")}`,
-          },
-        ],
+        content: [{ type: "text" as const, text: `${remotePath} (${list.length} entries):\n${lines.join("\n")}` }],
       };
     } catch (err: any) {
       return {
@@ -477,10 +514,84 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
-// Startup
+// Installer — runs when user executes `npx -y mcp-ssh-server` in a terminal
+// ---------------------------------------------------------------------------
+
+function getClaudeConfigPath(): string {
+  if (process.platform === "win32") {
+    const appData = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+    return path.join(appData, "Claude", "claude_desktop_config.json");
+  }
+  if (process.platform === "darwin") {
+    return path.join(os.homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json");
+  }
+  return path.join(os.homedir(), ".config", "Claude", "claude_desktop_config.json");
+}
+
+function install(): void {
+  console.log("");
+  console.log("  MCP SSH Server — Setup");
+  console.log("  ──────────────────────");
+  console.log("");
+
+  const configPath = getClaudeConfigPath();
+  const configDir = path.dirname(configPath);
+
+  // Read existing config or start fresh
+  let config: any = {};
+  if (fs.existsSync(configPath)) {
+    try { config = JSON.parse(fs.readFileSync(configPath, "utf-8")); } catch { config = {}; }
+  }
+
+  // Check if already installed
+  const existing = config?.mcpServers?.ssh;
+  if (existing && JSON.stringify(existing.args || []).includes("mcp-ssh-server")) {
+    console.log("  Already installed!");
+    console.log("");
+    console.log("  Restart Claude Desktop if you haven't already, then tell Claude:");
+    console.log('  → "Connect to my server at 192.168.1.100 as root with password xyz"');
+    console.log("");
+    console.log(`  Config:  ${configPath}`);
+    console.log(`  Servers: ${SERVERS_FILE}`);
+    console.log("");
+    return;
+  }
+
+  // Add our entry (preserves any existing mcpServers)
+  if (!config.mcpServers) config.mcpServers = {};
+  config.mcpServers.ssh = {
+    command: "npx",
+    args: ["-y", "mcp-ssh-server"],
+  };
+
+  // Write config
+  if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+  console.log("  Done! SSH server added to Claude Desktop.");
+  console.log("");
+  console.log("  Next:");
+  console.log("    1. Restart Claude Desktop");
+  console.log("    2. Tell Claude what server to connect to, for example:");
+  console.log('       "Connect to 185.91.118.4 as root, password mypass, call it production"');
+  console.log("");
+  console.log("  Claude will remember your servers. You can also edit them manually:");
+  console.log(`    ${SERVERS_FILE}`);
+  console.log("");
+}
+
+// ---------------------------------------------------------------------------
+// Entry point
 // ---------------------------------------------------------------------------
 
 async function main() {
+  // Terminal (user ran the command) → install into Claude Desktop
+  // Piped stdin (Claude Desktop launched us) → run as MCP server
+  if (process.stdin.isTTY) {
+    install();
+    return;
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("MCP SSH Server running on stdio");
