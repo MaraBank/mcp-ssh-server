@@ -1,22 +1,41 @@
 {
   "name": "mcp-ssh-server",
   "version": "1.0.0",
-  "description": "MCP server and interactive CLI providing SSH capabilities for Claude Desktop",
+  "description": "MCP server addon for Claude Desktop — SSH into servers, run commands, transfer files",
   "main": "build/index.js",
   "bin": {
-    "mcp-ssh-server": "build/index.js",
-    "mcp-ssh": "build/cli.js"
+    "mcp-ssh-server": "build/index.js"
   },
+  "files": [
+    "build/index.js",
+    "build/index.js.map",
+    "build/index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
-    "start": "node build/index.js",
-    "cli": "node build/cli.js",
-    "package": "pkg build/cli.js --targets node18-win-x64,node18-linux-x64 --output dist/mcp-ssh --compress GZip"
+    "prepublishOnly": "npm run build",
+    "start": "node build/index.js"
   },
-  "pkg": {
-    "assets": [
-      "node_modules/ssh2/**/*"
-    ]
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "ssh",
+    "sftp",
+    "claude",
+    "claude-desktop",
+    "model-context-protocol",
+    "remote",
+    "server-management"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MaraBank/mcp-ssh-server.git"
+  },
+  "homepage": "https://github.com/MaraBank/mcp-ssh-server",
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
@@ -26,7 +45,6 @@
   "devDependencies": {
     "@types/node": "^22.13.1",
     "@types/ssh2": "^1.15.4",
-    "@yao-pkg/pkg": "^6.0.0",
     "typescript": "^5.7.3"
   },
   "license": "MIT"

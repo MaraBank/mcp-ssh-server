@@ -1,129 +1,66 @@
 # MCP SSH Server
 
-An MCP (Model Context Protocol) server and standalone CLI that provides SSH capabilities: connect to remote servers, execute commands, transfer files, switch between servers.
+MCP server addon for **Claude Desktop** that gives Claude SSH access to your servers — connect, run commands, upload/download files, and transfer files between servers.
 
-## Download (Standalone EXE)
+## Install (2 steps)
 
-Go to the [Releases](https://github.com/MaraBank/mcp-ssh-server/releases) page and download:
+### 1. Open your Claude Desktop config
 
-- **Windows:** `mcp-ssh-win.exe`
-- **Linux:** `mcp-ssh-linux`
-
-The EXE is fully self-contained — Node.js is bundled inside. No installation required. Just run it.
-
-> **Note:** Python is **not** required. This tool is built entirely with Node.js. If you need Python on your remote servers, install it there — this SSH client does not need it locally.
-
-## Standalone CLI (EXE)
-
-Double-click or run the EXE from a terminal. On first launch it walks you through adding your first server:
+On Windows, open this file in a text editor:
 
 ```
-  ╔═══════════════════════════════════╗
-  ║       MCP SSH Manager v1.0.0      ║
-  ╚═══════════════════════════════════╝
-
-  No servers configured yet. Let's add your first server!
-
-  Add a new server
-
-  Name (e.g. production): production
-  Host (IP or hostname): 185.91.118.4
-  Port [22]: 22
-  Username: root
-  Auth type (password / key) [password]: password
-  Password:
-
-  ℹ Connecting to root@185.91.118.4:22...
-  ✓ Connected! Server "production" saved and active.
-
-[production] > ls /var/www
-html  mysite
-
-[production] > add staging 10.0.0.5 deploy mypassword123
-  ℹ Connecting to deploy@10.0.0.5:22...
-  ✓ Connected! Server "staging" saved and active.
-
-[production] > switch staging
-  ✓ Switched to "staging".
-
-[staging] > uptime
- 12:34:56 up 42 days, ...
-
-[staging] > servers
-
-  Saved Servers
-
-    production  root@185.91.118.4:22    [connected]
-    staging     deploy@10.0.0.5:22      [connected] ← active
+%APPDATA%\Claude\claude_desktop_config.json
 ```
 
-### CLI Commands
+### 2. Add the SSH server
 
-| Command | Description |
-|---------|-------------|
-| `add` | Add a new server (interactive prompts) |
-| `add <name> <host> <user> <password>` | Quick-add with password |
-| `add <name> <host> <user> key <path>` | Quick-add with SSH key |
-| `servers` | List all saved servers |
-| `connect <name>` | Connect to a saved server |
-| `switch <name>` | Switch active server (auto-connects) |
-| `disconnect [name]` | Disconnect from a server |
-| `remove <name>` | Remove a saved server |
-| `upload <local> <remote>` | Upload a file to the active server |
-| `download <remote> <local>` | Download a file from the active server |
-| `transfer <srv:path> <srv:path>` | Transfer a file between two servers |
-| `help` | Show all commands |
-| `exit` | Quit |
-
-Anything else you type is executed as a shell command on the active server.
-
-Server configs are saved to `~/.mcp-ssh/servers.json` so they persist between sessions.
-
-## MCP Server (for Claude Desktop)
-
-This project also includes an MCP server that gives Claude Desktop direct SSH access.
-
-### MCP Tools
-
-| Tool | Description |
-|------|-------------|
-| `ssh_connect` | Connect to a server (password or key auth) |
-| `ssh_disconnect` | Close a session |
-| `ssh_list_sessions` | List active sessions |
-| `ssh_execute` | Run a command on a connected server |
-| `ssh_upload` | Upload a local file to a remote server |
-| `ssh_download` | Download a file from a remote server |
-| `ssh_transfer` | Transfer a file between two remote servers |
-| `ssh_list_files` | List files in a remote directory |
-
-### Configure Claude Desktop (Windows)
-
-Open `%APPDATA%\Claude\claude_desktop_config.json` and add:
+Paste this into the file:
 
 ```json
 {
   "mcpServers": {
     "ssh": {
-      "command": "node",
-      "args": ["C:\\path\\to\\mcp-ssh-server\\build\\index.js"]
+      "command": "npx",
+      "args": ["-y", "mcp-ssh-server"]
     }
   }
 }
 ```
 
-Then restart Claude Desktop.
+Restart Claude Desktop. That's it — Claude now has SSH tools available.
+
+## What you can ask Claude
+
+Once installed, just talk to Claude naturally:
+
+- *"Connect to 185.91.118.4 as root with password mypass123, call it production"*
+- *"Run `ls -la /var/www` on production"*
+- *"Show me all files in /etc/nginx on production"*
+- *"Upload C:\Users\me\app.zip to /tmp/app.zip on production"*
+- *"Download /var/log/nginx/error.log from production to my desktop"*
+- *"Connect to 10.0.0.5 as deploy with my key at C:\Users\me\.ssh\id_rsa, name it staging"*
+- *"Transfer /var/log/app.log from production to /tmp/app.log on staging"*
+- *"List all my active sessions"*
+- *"Disconnect from staging"*
+
+## Tools
+
+| Tool | What it does |
+|------|--------------|
+| `ssh_connect` | Connect to a server (password or SSH key) |
+| `ssh_disconnect` | Close a connection |
+| `ssh_list_sessions` | Show all active connections |
+| `ssh_execute` | Run a shell command |
+| `ssh_upload` | Upload a local file to a server (SFTP) |
+| `ssh_download` | Download a file from a server (SFTP) |
+| `ssh_transfer` | Copy a file between two connected servers |
+| `ssh_list_files` | List directory contents on a server |
 
 ## Building from Source
 
-### Requirements
+If you prefer to build it yourself instead of using `npx`:
 
-- **Node.js** 18 or later — [https://nodejs.org](https://nodejs.org)
-- **npm** (comes with Node.js)
-- **Git** (to clone the repo)
-
-Python is **not** required.
-
-### Steps
+**Requirements:** [Node.js](https://nodejs.org) 18+ (includes npm)
 
 ```bash
 git clone https://github.com/MaraBank/mcp-ssh-server.git
@@ -132,63 +69,25 @@ npm install
 npm run build
 ```
 
-This produces `build/index.js` (MCP server) and `build/cli.js` (interactive CLI).
+Then point Claude Desktop to your local build:
 
-Run the CLI directly:
-
-```bash
-node build/cli.js
+```json
+{
+  "mcpServers": {
+    "ssh": {
+      "command": "node",
+      "args": ["C:\\full\\path\\to\\mcp-ssh-server\\build\\index.js"]
+    }
+  }
+}
 ```
 
-### Building the EXE yourself
+## Security
 
-After building from source:
-
-```bash
-npm run package
-```
-
-This creates standalone executables in the `dist/` folder:
-
-- `dist/mcp-ssh-win.exe` — Windows x64
-- `dist/mcp-ssh-linux` — Linux x64
-
-The EXE bundles Node.js inside so it runs anywhere with zero dependencies.
-
-## Releasing (Maintainers)
-
-Releases are built and code-signed automatically via GitHub Actions. To publish a new version:
-
-```bash
-git tag v1.1.0
-git push --tags
-```
-
-The workflow builds the EXE, signs it via SignPath, and creates a GitHub Release with binaries attached.
-
-### Setting up code signing (SignPath.io — free for open source)
-
-This is a one-time setup so the Windows EXE is trusted and SmartScreen won't warn users:
-
-1. Go to [signpath.io](https://signpath.io) and sign up
-2. Apply for the **Open Source** program — submit your GitHub repo URL
-3. Once approved, in the SignPath dashboard:
-   - Create a **project** named `mcp-ssh-server`
-   - Create an **artifact configuration** named `exe` for PE (Windows executable) files
-   - Create a **signing policy** named `release-signing`
-4. Install the **SignPath Connector** GitHub App on your repo (link in SignPath dashboard)
-5. In your GitHub repo, add:
-   - **Secret** `SIGNPATH_API_TOKEN` — your API token from SignPath
-   - **Variable** `SIGNPATH_ORGANIZATION_ID` — your org ID from SignPath
-
-The workflow automatically falls back to unsigned binaries if SignPath isn't configured yet, so CI works from day one.
-
-## Security Notes
-
-- Passwords for saved servers are stored in `~/.mcp-ssh/servers.json` with `0600` file permissions. Use SSH keys for better security.
-- MCP server credentials are held in memory only and never written to disk.
-- Connections time out after 30 seconds if unreachable.
-- Windows EXE releases are code-signed via [SignPath.io](https://signpath.io) to prevent SmartScreen warnings.
+- Credentials are held in memory only for the duration of the session and never written to disk
+- Private keys can be referenced by file path or passed as a string
+- Connections time out after 30 seconds
+- No data is sent anywhere except to the SSH servers you connect to
 
 ## License
 
