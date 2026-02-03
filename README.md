@@ -1,5 +1,6 @@
 # claude-ssh-mcp
 
+[![PyPI version](https://img.shields.io/pypi/v/claude-ssh-mcp.svg)](https://pypi.org/project/claude-ssh-mcp/)
 [![npm version](https://img.shields.io/npm/v/claude-ssh-mcp.svg)](https://www.npmjs.com/package/claude-ssh-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -7,13 +8,20 @@ MCP addon for **Claude Desktop** — gives Claude SSH access to your servers.
 
 ## Install
 
+**With pip (auto-installs Node.js if needed):**
+
+```bash
+pip install claude-ssh-mcp
+claude-ssh-mcp
+```
+
+**Or with npm:**
+
 ```bash
 npx -y claude-ssh-mcp
 ```
 
 That's it. Restart Claude Desktop and you're ready.
-
-**Requirements:** [Node.js](https://nodejs.org) 18+
 
 ## Usage
 
@@ -31,6 +39,7 @@ Just talk to Claude naturally:
 ## Features
 
 - **Auto-install** — one command adds it to Claude Desktop
+- **Auto-installs Node.js** — pip version handles everything
 - **Servers are saved** — connect once, reconnect by name
 - **SSH keepalive** — connections stay alive during long sessions
 - **Auto-reconnect** — recovers from network interruptions
