@@ -155,11 +155,40 @@ This creates standalone executables in the `dist/` folder:
 
 The EXE bundles Node.js inside so it runs anywhere with zero dependencies.
 
+## Releasing (Maintainers)
+
+Releases are built and code-signed automatically via GitHub Actions. To publish a new version:
+
+```bash
+git tag v1.1.0
+git push --tags
+```
+
+The workflow builds the EXE, signs it via SignPath, and creates a GitHub Release with binaries attached.
+
+### Setting up code signing (SignPath.io — free for open source)
+
+This is a one-time setup so the Windows EXE is trusted and SmartScreen won't warn users:
+
+1. Go to [signpath.io](https://signpath.io) and sign up
+2. Apply for the **Open Source** program — submit your GitHub repo URL
+3. Once approved, in the SignPath dashboard:
+   - Create a **project** named `mcp-ssh-server`
+   - Create an **artifact configuration** named `exe` for PE (Windows executable) files
+   - Create a **signing policy** named `release-signing`
+4. Install the **SignPath Connector** GitHub App on your repo (link in SignPath dashboard)
+5. In your GitHub repo, add:
+   - **Secret** `SIGNPATH_API_TOKEN` — your API token from SignPath
+   - **Variable** `SIGNPATH_ORGANIZATION_ID` — your org ID from SignPath
+
+The workflow automatically falls back to unsigned binaries if SignPath isn't configured yet, so CI works from day one.
+
 ## Security Notes
 
 - Passwords for saved servers are stored in `~/.mcp-ssh/servers.json` with `0600` file permissions. Use SSH keys for better security.
 - MCP server credentials are held in memory only and never written to disk.
 - Connections time out after 30 seconds if unreachable.
+- Windows EXE releases are code-signed via [SignPath.io](https://signpath.io) to prevent SmartScreen warnings.
 
 ## License
 
