@@ -737,7 +737,7 @@ function install(): void {
   console.log("  Next:");
   console.log("    1. Restart Claude Desktop");
   console.log("    2. Tell Claude what server to connect to, for example:");
-  console.log('       "Connect to 185.91.118.4 as root, password mypass, call it production"');
+  console.log('       "Connect to 192.168.1.100 as root, password mypass, call it production"');
   console.log("");
   console.log("  Claude will remember your servers. You can also edit them manually:");
   console.log(`    ${SERVERS_FILE}`);

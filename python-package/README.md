@@ -27,7 +27,7 @@ That's it. Restart Claude Desktop and you're ready.
 
 Just talk to Claude naturally:
 
-- *"Connect to 185.91.118.4 as root with password mypass, call it production"*
+- *"Connect to 192.168.1.100 as root with password mypass, call it production"*
 - *"Run `ls -la /var/www` on production"*
 - *"Upload C:\Users\me\app.zip to /tmp/app.zip on production"*
 - *"Download /var/log/error.log from production"*
@@ -54,7 +54,7 @@ Edit manually if you prefer:
 ```json
 {
   "production": {
-    "host": "185.91.118.4",
+    "host": "192.168.1.100",
     "port": 22,
     "username": "root",
     "password": "mypass"
