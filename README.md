@@ -1,20 +1,23 @@
-# MCP SSH Server
+# claude-ssh-mcp
+
+[![npm version](https://img.shields.io/npm/v/claude-ssh-mcp.svg)](https://www.npmjs.com/package/claude-ssh-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 MCP addon for **Claude Desktop** — gives Claude SSH access to your servers.
 
 ## Install
 
-Run this one command (requires [Node.js](https://nodejs.org) 18+):
-
-```
+```bash
 npx -y claude-ssh-mcp
 ```
 
-It automatically adds itself to Claude Desktop. Restart Claude Desktop and you're done.
+That's it. Restart Claude Desktop and you're ready.
+
+**Requirements:** [Node.js](https://nodejs.org) 18+
 
 ## Usage
 
-Just talk to Claude:
+Just talk to Claude naturally:
 
 - *"Connect to 185.91.118.4 as root with password mypass, call it production"*
 - *"Run `ls -la /var/www` on production"*
@@ -25,11 +28,19 @@ Just talk to Claude:
 - *"List my servers"*
 - *"Remove staging"*
 
-## Servers are saved
+## Features
 
-When you tell Claude to connect to a server, it's saved to `~/.mcp-ssh/servers.json`. Next time just say *"connect to production"* and it reconnects using the saved config.
+- **Auto-install** — one command adds it to Claude Desktop
+- **Servers are saved** — connect once, reconnect by name
+- **SSH keepalive** — connections stay alive during long sessions
+- **Auto-reconnect** — recovers from network interruptions
+- **Auto-update** — checks for updates every 2 hours
 
-You can also edit `servers.json` manually:
+## Saved Servers
+
+When you tell Claude to connect, the server is saved to `~/.mcp-ssh/servers.json`. Next time just say *"connect to production"*.
+
+Edit manually if you prefer:
 
 ```json
 {
@@ -71,7 +82,7 @@ npm install
 npm run build
 ```
 
-Then point Claude Desktop config (`%APPDATA%\Claude\claude_desktop_config.json`) to your local build:
+Then in Claude Desktop config (`%APPDATA%\Claude\claude_desktop_config.json`):
 
 ```json
 {
@@ -86,4 +97,4 @@ Then point Claude Desktop config (`%APPDATA%\Claude\claude_desktop_config.json`)
 
 ## License
 
-MIT
+MIT — free and open source.
