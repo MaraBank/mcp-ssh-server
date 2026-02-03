@@ -1,0 +1,2 @@
+[console_scripts]
+claude-ssh-mcp = claude_ssh_mcp:main

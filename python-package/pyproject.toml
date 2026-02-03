@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claude-ssh-mcp"
+version = "1.0.0"
+description = "MCP addon for Claude Desktop - SSH into servers, run commands, transfer files"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "MaraBank", email = "mb08112009@gmail.com"}
+]
+keywords = ["mcp", "ssh", "claude", "claude-desktop", "sftp", "remote", "server"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+requires-python = ">=3.8"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/MaraBank/mcp-ssh-server"
+Repository = "https://github.com/MaraBank/mcp-ssh-server"
+Issues = "https://github.com/MaraBank/mcp-ssh-server/issues"
+
+[project.scripts]
+claude-ssh-mcp = "claude_ssh_mcp:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
