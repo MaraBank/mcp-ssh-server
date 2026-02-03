@@ -7,6 +7,8 @@ import { z } from "zod";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import * as https from "https";
+import { execSync } from "child_process";
 
 // ---------------------------------------------------------------------------
 // Saved servers (persisted to ~/.mcp-ssh/servers.json)
@@ -514,6 +516,82 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
+// Auto-update checker (runs every 2 hours)
+// ---------------------------------------------------------------------------
+
+const CURRENT_VERSION = "1.0.0";
+const UPDATE_CHECK_INTERVAL = 2 * 60 * 60 * 1000; // 2 hours in ms
+
+function fetchLatestVersion(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const req = https.get(
+      "https://raw.githubusercontent.com/MaraBank/mcp-ssh-server/master/package.json",
+      { timeout: 10000 },
+      (res) => {
+        if (res.statusCode !== 200) {
+          resolve(null);
+          return;
+        }
+        let data = "";
+        res.on("data", (chunk) => { data += chunk; });
+        res.on("end", () => {
+          try {
+            const pkg = JSON.parse(data);
+            resolve(pkg.version || null);
+          } catch {
+            resolve(null);
+          }
+        });
+      }
+    );
+    req.on("error", () => resolve(null));
+    req.on("timeout", () => { req.destroy(); resolve(null); });
+  });
+}
+
+function compareVersions(current: string, latest: string): number {
+  const c = current.split(".").map(Number);
+  const l = latest.split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((l[i] || 0) > (c[i] || 0)) return 1;
+    if ((l[i] || 0) < (c[i] || 0)) return -1;
+  }
+  return 0;
+}
+
+async function checkForUpdates(): Promise<void> {
+  try {
+    const latest = await fetchLatestVersion();
+    if (latest && compareVersions(CURRENT_VERSION, latest) > 0) {
+      console.error(`[mcp-ssh-server] Update available: ${CURRENT_VERSION} → ${latest}`);
+      console.error(`[mcp-ssh-server] Run: npx -y mcp-ssh-server@latest`);
+
+      // Try to auto-update by clearing npx cache for this package
+      try {
+        if (process.platform === "win32") {
+          execSync("npm cache clean --force", { stdio: "ignore" });
+        } else {
+          execSync("npm cache clean --force", { stdio: "ignore" });
+        }
+        console.error("[mcp-ssh-server] Cache cleared. Restart Claude Desktop to get the update.");
+      } catch {
+        // Cache clear failed, user will need to update manually
+      }
+    }
+  } catch {
+    // Update check failed silently
+  }
+}
+
+function startUpdateChecker(): void {
+  // Check immediately on startup (with a small delay to not block init)
+  setTimeout(checkForUpdates, 5000);
+
+  // Then check every 2 hours
+  setInterval(checkForUpdates, UPDATE_CHECK_INTERVAL);
+}
+
+// ---------------------------------------------------------------------------
 // Installer — runs when user executes `npx -y mcp-ssh-server` in a terminal
 // ---------------------------------------------------------------------------
 
@@ -595,6 +673,9 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("MCP SSH Server running on stdio");
+
+  // Start background update checker
+  startUpdateChecker();
 }
 
 main().catch((err) => {
