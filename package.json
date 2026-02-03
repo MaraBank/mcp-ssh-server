@@ -1,6 +1,6 @@
 {
   "name": "claude-ssh-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server addon for Claude Desktop — SSH into servers, run commands, transfer files",
   "main": "build/index.js",
   "bin": {
