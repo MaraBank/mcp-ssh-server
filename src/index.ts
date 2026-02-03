@@ -62,6 +62,7 @@ function deleteSavedServer(name: string): boolean {
 interface SessionInfo {
   client: Client;
   config: { host: string; port: number; username: string };
+  connectOptions: any; // Store options for reconnection
 }
 
 const sessions = new Map<string, SessionInfo>();
@@ -74,6 +75,75 @@ function getSession(sessionName: string): SessionInfo {
     );
   }
   return session;
+}
+
+// ---------------------------------------------------------------------------
+// SSH Keepalive & Auto-reconnect
+// ---------------------------------------------------------------------------
+
+const KEEPALIVE_INTERVAL = 30_000; // Send keepalive every 30 seconds
+const RECONNECT_DELAY = 5_000; // Wait 5 seconds before reconnecting
+const MAX_RECONNECT_ATTEMPTS = 3;
+
+async function reconnectSession(sessionName: string, session: SessionInfo, attempt = 1): Promise<boolean> {
+  if (attempt > MAX_RECONNECT_ATTEMPTS) {
+    console.error(`[mcp-ssh-server] Failed to reconnect "${sessionName}" after ${MAX_RECONNECT_ATTEMPTS} attempts`);
+    sessions.delete(sessionName);
+    return false;
+  }
+
+  console.error(`[mcp-ssh-server] Reconnecting "${sessionName}" (attempt ${attempt}/${MAX_RECONNECT_ATTEMPTS})...`);
+
+  const newClient = new Client();
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        newClient.end();
+        reject(new Error("Connection timed out"));
+      }, 30_000);
+
+      newClient.on("ready", () => { clearTimeout(timeout); resolve(); });
+      newClient.on("error", (err) => { clearTimeout(timeout); reject(err); });
+
+      newClient.connect({
+        ...session.connectOptions,
+        keepaliveInterval: KEEPALIVE_INTERVAL,
+        keepaliveCountMax: 3,
+      });
+    });
+
+    // Setup event handlers for the new client
+    setupClientHandlers(sessionName, newClient, session.connectOptions);
+
+    // Update session with new client
+    session.client = newClient;
+    console.error(`[mcp-ssh-server] Reconnected "${sessionName}" successfully`);
+    return true;
+
+  } catch (err: any) {
+    console.error(`[mcp-ssh-server] Reconnect attempt ${attempt} failed: ${err.message}`);
+    await new Promise(r => setTimeout(r, RECONNECT_DELAY));
+    return reconnectSession(sessionName, session, attempt + 1);
+  }
+}
+
+function setupClientHandlers(sessionName: string, client: Client, connectOptions: any): void {
+  client.on("close", () => {
+    const session = sessions.get(sessionName);
+    if (session && session.client === client) {
+      console.error(`[mcp-ssh-server] Connection "${sessionName}" closed, attempting reconnect...`);
+      reconnectSession(sessionName, session);
+    }
+  });
+
+  client.on("end", () => {
+    // Only log, don't reconnect on clean end (user disconnect)
+  });
+
+  client.on("error", (err) => {
+    console.error(`[mcp-ssh-server] Connection "${sessionName}" error: ${err.message}`);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -183,6 +253,19 @@ server.tool(
 
     const client = new Client();
 
+    // Store connection options for reconnection (don't store inline privateKey)
+    const connectOptions = {
+      host,
+      port,
+      username,
+      password,
+      privateKey: resolvedKey,
+      passphrase,
+      keepaliveInterval: KEEPALIVE_INTERVAL,
+      keepaliveCountMax: 3, // Disconnect after 3 missed keepalives (90 seconds)
+      readyTimeout: 30_000,
+    };
+
     try {
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -193,7 +276,7 @@ server.tool(
         client.on("ready", () => { clearTimeout(timeout); resolve(); });
         client.on("error", (err) => { clearTimeout(timeout); reject(err); });
 
-        client.connect({ host, port, username, password, privateKey: resolvedKey, passphrase });
+        client.connect(connectOptions);
       });
     } catch (err: any) {
       return {
@@ -202,7 +285,10 @@ server.tool(
       };
     }
 
-    sessions.set(sessionName, { client, config: { host, port, username } });
+    // Setup keepalive and auto-reconnect handlers
+    setupClientHandlers(sessionName, client, connectOptions);
+
+    sessions.set(sessionName, { client, config: { host, port, username }, connectOptions });
 
     // Auto-save server config (never save inline privateKey to disk)
     saveServer(sessionName, {
