@@ -87,12 +87,12 @@ const MAX_RECONNECT_ATTEMPTS = 3;
 
 async function reconnectSession(sessionName: string, session: SessionInfo, attempt = 1): Promise<boolean> {
   if (attempt > MAX_RECONNECT_ATTEMPTS) {
-    console.error(`[mcp-ssh-server] Failed to reconnect "${sessionName}" after ${MAX_RECONNECT_ATTEMPTS} attempts`);
+    console.error(`[claude-ssh-mcp] Failed to reconnect "${sessionName}" after ${MAX_RECONNECT_ATTEMPTS} attempts`);
     sessions.delete(sessionName);
     return false;
   }
 
-  console.error(`[mcp-ssh-server] Reconnecting "${sessionName}" (attempt ${attempt}/${MAX_RECONNECT_ATTEMPTS})...`);
+  console.error(`[claude-ssh-mcp] Reconnecting "${sessionName}" (attempt ${attempt}/${MAX_RECONNECT_ATTEMPTS})...`);
 
   const newClient = new Client();
 
@@ -118,11 +118,11 @@ async function reconnectSession(sessionName: string, session: SessionInfo, attem
 
     // Update session with new client
     session.client = newClient;
-    console.error(`[mcp-ssh-server] Reconnected "${sessionName}" successfully`);
+    console.error(`[claude-ssh-mcp] Reconnected "${sessionName}" successfully`);
     return true;
 
   } catch (err: any) {
-    console.error(`[mcp-ssh-server] Reconnect attempt ${attempt} failed: ${err.message}`);
+    console.error(`[claude-ssh-mcp] Reconnect attempt ${attempt} failed: ${err.message}`);
     await new Promise(r => setTimeout(r, RECONNECT_DELAY));
     return reconnectSession(sessionName, session, attempt + 1);
   }
@@ -132,7 +132,7 @@ function setupClientHandlers(sessionName: string, client: Client, connectOptions
   client.on("close", () => {
     const session = sessions.get(sessionName);
     if (session && session.client === client) {
-      console.error(`[mcp-ssh-server] Connection "${sessionName}" closed, attempting reconnect...`);
+      console.error(`[claude-ssh-mcp] Connection "${sessionName}" closed, attempting reconnect...`);
       reconnectSession(sessionName, session);
     }
   });
@@ -142,7 +142,7 @@ function setupClientHandlers(sessionName: string, client: Client, connectOptions
   });
 
   client.on("error", (err) => {
-    console.error(`[mcp-ssh-server] Connection "${sessionName}" error: ${err.message}`);
+    console.error(`[claude-ssh-mcp] Connection "${sessionName}" error: ${err.message}`);
   });
 }
 
@@ -177,7 +177,7 @@ function execCommand(
 // ---------------------------------------------------------------------------
 
 const server = new McpServer({
-  name: "mcp-ssh-server",
+  name: "claude-ssh-mcp",
   version: "1.0.0",
 });
 
@@ -611,7 +611,7 @@ const UPDATE_CHECK_INTERVAL = 2 * 60 * 60 * 1000; // 2 hours in ms
 function fetchLatestVersion(): Promise<string | null> {
   return new Promise((resolve) => {
     const req = https.get(
-      "https://raw.githubusercontent.com/MaraBank/mcp-ssh-server/master/package.json",
+      "https://raw.githubusercontent.com/MaraBank/claude-ssh-mcp/master/package.json",
       { timeout: 10000 },
       (res) => {
         if (res.statusCode !== 200) {
@@ -649,8 +649,8 @@ async function checkForUpdates(): Promise<void> {
   try {
     const latest = await fetchLatestVersion();
     if (latest && compareVersions(CURRENT_VERSION, latest) > 0) {
-      console.error(`[mcp-ssh-server] Update available: ${CURRENT_VERSION} → ${latest}`);
-      console.error(`[mcp-ssh-server] Run: npx -y mcp-ssh-server@latest`);
+      console.error(`[claude-ssh-mcp] Update available: ${CURRENT_VERSION} → ${latest}`);
+      console.error(`[claude-ssh-mcp] Run: npx -y claude-ssh-mcp@latest`);
 
       // Try to auto-update by clearing npx cache for this package
       try {
@@ -659,7 +659,7 @@ async function checkForUpdates(): Promise<void> {
         } else {
           execSync("npm cache clean --force", { stdio: "ignore" });
         }
-        console.error("[mcp-ssh-server] Cache cleared. Restart Claude Desktop to get the update.");
+        console.error("[claude-ssh-mcp] Cache cleared. Restart Claude Desktop to get the update.");
       } catch {
         // Cache clear failed, user will need to update manually
       }
@@ -678,7 +678,7 @@ function startUpdateChecker(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Installer — runs when user executes `npx -y mcp-ssh-server` in a terminal
+// Installer — runs when user executes `npx -y claude-ssh-mcp` in a terminal
 // ---------------------------------------------------------------------------
 
 function getClaudeConfigPath(): string {
@@ -709,7 +709,7 @@ function install(): void {
 
   // Check if already installed
   const existing = config?.mcpServers?.ssh;
-  if (existing && JSON.stringify(existing.args || []).includes("mcp-ssh-server")) {
+  if (existing && JSON.stringify(existing.args || []).includes("claude-ssh-mcp")) {
     console.log("  Already installed!");
     console.log("");
     console.log("  Restart Claude Desktop if you haven't already, then tell Claude:");
@@ -725,7 +725,7 @@ function install(): void {
   if (!config.mcpServers) config.mcpServers = {};
   config.mcpServers.ssh = {
     command: "npx",
-    args: ["-y", "mcp-ssh-server"],
+    args: ["-y", "claude-ssh-mcp"],
   };
 
   // Write config

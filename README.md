@@ -7,7 +7,7 @@ MCP addon for **Claude Desktop** — gives Claude SSH access to your servers.
 Run this one command (requires [Node.js](https://nodejs.org) 18+):
 
 ```
-npx -y mcp-ssh-server
+npx -y claude-ssh-mcp
 ```
 
 It automatically adds itself to Claude Desktop. Restart Claude Desktop and you're done.

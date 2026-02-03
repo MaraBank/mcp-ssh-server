@@ -1,10 +1,10 @@
 {
-  "name": "mcp-ssh-server",
+  "name": "claude-ssh-mcp",
   "version": "1.0.0",
   "description": "MCP server addon for Claude Desktop — SSH into servers, run commands, transfer files",
   "main": "build/index.js",
   "bin": {
-    "mcp-ssh-server": "build/index.js"
+    "claude-ssh-mcp": "build/index.js"
   },
   "files": [
     "build/index.js",
